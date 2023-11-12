@@ -1,0 +1,202 @@
+---
+title: "Ringtail-Case-Study"
+author: "Anna Willoughby"
+date: "2023-11-12"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo = FALSE, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## DLF Workshop 2023
+
+```{r load data and libraries,warning = FALSE, message = FALSE, echo = FALSE}
+library(tidyverse)
+lit <- read.csv(file = "data/ringtail/literature.csv")
+journals <- read.csv(file = "data/ringtail/journals.csv")
+dpts <- read.csv(file = "data/ringtail/datapoints.csv")
+
+# merge lit and journal data 
+journals$jpub <- paste(journals$Journal, "-", journals$Publisher.name)
+lit$jpub <- paste(lit$journal_or_book, "-", lit$publisher)
+
+lit2 <- left_join(lit, journals, by ="jpub" )
+
+id_method <- dpts %>% 
+  select(systematic.search, expert.curated, source_id) %>%
+  unique()
+lit3 <- left_join(lit2, id_method, by ="source_id" )
+lit3$systematic.search <- ifelse(is.na(lit3$systematic.search) == TRUE, "yes", lit3$systematic.search)
+lit3$expert.curated <- ifelse(is.na(lit3$expert.curated) == TRUE, "no", lit3$expert.curated)
+
+```
+
+## Comparing literature discovered through each method 
+
+```{r venn_diagram, echo=FALSE,warning = FALSE, message = FALSE}
+library(ggVennDiagram)
+library(viridis)
+SystematicSearch = lit3 %>% 
+  dplyr::filter(systematic.search == "yes") 
+CitationDiving = lit3 %>% 
+  dplyr::filter(expert.curated == "yes") 
+x <- list(A=SystematicSearch$source_id, 
+          B=CitationDiving$source_id)
+# pdf(file='figures/ringtail/dataset-comparison.pdf')
+ggVennDiagram(x,category.names = c("SystematicSearch","CitationDiving")) +
+  scale_fill_viridis(direction = -1) + 
+  scale_color_manual(values = c("black","black"))
+# dev.off()
+# while (!is.null(dev.list()))  dev.off()
+
+# Let's filter to only relevant data 
+rellit <- lit3 %>% dplyr::filter(relevant == "yes")
+
+rSystematicSearch = rellit %>% 
+  dplyr::filter(systematic.search == "yes") 
+rCitationDiving = rellit %>% 
+  dplyr::filter(expert.curated == "yes") 
+y <- list(A=rSystematicSearch$source_id, 
+          B=rCitationDiving$source_id)
+# pdf(file='figures/ringtail/dataset-comparison.pdf')
+ggVennDiagram(y,category.names = c("SystematicSearch","CitationDiving")) +
+  scale_fill_viridis(direction = -1) + 
+  scale_color_manual(values = c("black","black"))
+```
+
+
+```{r map publisher locations, echo = FALSE,warning = FALSE, message = FALSE}
+# create table of publisher countries x discovered literature 
+uniquepub_countries <- lit3 %>% 
+  group_by(Publisher.country) %>% 
+  summarise(n_sources = n())
+
+SSpubcountries <- lit3 %>% 
+  dplyr::filter(systematic.search == "yes") %>% 
+  group_by(Publisher.country) %>% 
+  summarise(n_SS_sources = n())
+
+ECpubcountries <- lit3 %>% 
+  dplyr::filter(expert.curated == "yes") %>% 
+  group_by(Publisher.country) %>% 
+  summarise(n_EC_sources = n())
+
+pubcountries <- full_join(SSpubcountries, ECpubcountries, by = "Publisher.country")
+# method_countries <- pubcountries %>% 
+#  pivot_longer(cols = starts_with("n_"),
+#               names_to = "method", 
+#               values_to = "n_sources") %>% 
+# method_countries <- method_countries %>% 
+#  dplyr::filter(is.na(method_countries$n_sources) = FALSE)
+pubcountries$n_SS_sources <- ifelse(is.na(pubcountries$n_SS_sources) == TRUE, 0, pubcountries$n_SS_sources)
+pubcountries$n_EC_sources <- ifelse(is.na(pubcountries$n_EC_sources) == TRUE, 0, pubcountries$n_EC_sources)
+
+pubcountries <- full_join(pubcountries, uniquepub_countries, by = "Publisher.country")
+
+# load mapping packages
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(plotly)
+
+# Load world map data with ADM outlines
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+SSpub_countries <- merge(world, SSpubcountries, by.x = "brk_a3", by.y = "Publisher.country")
+SSpublisher_map <- ggplot() +
+  geom_sf(data = world, fill = "lightgray", color = "white") +  # World map background
+  geom_sf(data = SSpub_countries, aes(fill = n_SS_sources), color = "white") +  
+  scale_fill_continuous(high = "#132B43", low = "lightblue", na.value ="lightgray") + 
+  labs(fill = "n_sources")
+  theme_minimal() +
+  theme(axis.text = element_blank(), axis.title = element_blank())  # Remove axis labels for clarity
+SSpmap <- ggplotly(SSpublisher_map)
+
+ECpub_countries <- merge(world, ECpubcountries, by.x = "brk_a3", by.y = "Publisher.country")
+ECpublisher_map <- ggplot() +
+  geom_sf(data = world, fill = "lightgray", color = "white") +  # World map background
+  geom_sf(data = ECpub_countries, aes(fill = n_EC_sources), color = "white") +  
+  scale_fill_continuous(high = "mediumblue", low = "lightblue", na.value ="lightgray") + 
+  theme_minimal() +
+  theme(axis.text = element_blank(), axis.title = element_blank()) + # Remove axis labels for clarity
+  theme(legend.position = "none")
+ECpmap <- ggplotly(ECpublisher_map)
+
+pubmap <- subplot(SSpmap, ECpmap, nrows = 2, shareX = TRUE, shareY = TRUE) %>%
+  layout(title = 'Publisher Countries')
+pubmap 
+
+
+# Bpub_countries <-right_join(world,method_countries, by = c("brk_a3" ="Publisher.country"))
+# Bpublisher_map <- ggplot() +
+#  geom_sf(data = world, fill = "lightgray", color = "white") +  # World map background
+#  geom_sf(data = Bpub_countries, aes(fill = n_sources), color = "white") +  
+#  facet_wrap(~method) +
+#  scale_fill_continuous(high = "#132B43", low = "lightblue", na.value ="lightgray") + 
+#  theme_minimal() +
+#  theme(axis.text = element_blank(), axis.title = element_blank()) + # Remove axis labels for clarity
+#  theme(legend.position = "none")
+# Bpmap <- ggplotly(Bpublisher_map)
+
+```
+
+
+
+
+```{r accumulation_curve, warning = FALSE, message = FALSE, echo=FALSE}
+# need to make a matrix of databases and literature 
+library(vegan)
+
+# convert datafram into a matrix R 
+bd_mat <- lit3 %>% dplyr::filter(databases_agreement != 0)
+bd_mat <- bd_mat[,c(1:5, 10)] 
+rownames(bd_mat) <- bd_mat$source_id
+bd_mat$source_id <- NULL
+bd_mat <- ifelse(bd_mat == "no", 0, 1)
+bd_mat <- t(bd_mat) # transpose so adding databases 
+
+# calculate mean and sd by databases 
+database_sums <- rowSums(bd_mat)
+mean(database_sums)
+sd(database_sums)
+# mean of 39.2 +/- 16.27 papers from each search, 
+
+# calculate rarefication curve
+l_accum <- specaccum(bd_mat, method = "exact", permutations = 100,
+                     conditioned =TRUE, gamma = "jack1",  w = NULL)
+# plot accumulation curve for our data 
+plot(l_accum,
+     xlab = "Number of Bibliographic Databases Searched",
+     ylab = "Number of discovered literature",
+    ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue")
+
+# But we don't really care about all literature, we only care about relevant literature: 
+rbd_mat <- rellit %>% 
+  dplyr::filter(databases_agreement != 0) 
+rbd_mat <- rbd_mat[,c(1:5, 10)] 
+rownames(rbd_mat) <-rbd_mat$source_id
+rbd_mat$source_id <- NULL
+rbd_mat <- ifelse(rbd_mat == "no", 0, 1)
+rbd_mat <- t(rbd_mat) # transpose so adding databases 
+
+# calculate mean and sd by databases 
+rdatabase_sums <- rowSums(rbd_mat)
+mean(rdatabase_sums)
+sd(rdatabase_sums)
+# mean of 9.2 +/- 5.34 papers from each search, 
+
+# calculate rarefication curve
+l_accum <- specaccum(rbd_mat, method = "exact", permutations = 100,
+                     conditioned =TRUE, gamma = "jack1",  w = NULL)
+# plot accumulation curve for our data 
+plot(l_accum,
+     xlab = "Number of Bibliographic Databases Searched",
+     ylab = "Number of discovered literature",
+    ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue")
+
+# extrapolate the accumulation curve with addition of other databases 
+rlitpool <- specpool(rbd_mat)
+rlitpool
+rlit_extrap <- poolaccum(rbd_mat)
+plot(rlit_extrap)
+```
