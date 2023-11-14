@@ -1,0 +1,326 @@
+---
+title: "EMulti-DLF"
+author: "Kaylee Arnold"
+date: "2023-11-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load data and libraries, message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+lit <- read.csv(file = "data/Tapeworm/DLF_EMulti-dataset.final.csv")
+```
+
+
+## Compare literature discovered through each method 
+```{r venn_diagram, echo=FALSE, message=FALSE, warning=FALSE}
+library(ggVennDiagram)
+library(viridis)
+SystematicSearch = lit %>% 
+  dplyr::filter(systematic_searchOksanen == "yes") 
+CitationDiving = lit %>% 
+  dplyr::filter(c(EID2 == "yes" | GMPD2 == "yes")) 
+
+x <- list(A=SystematicSearch$CITATION_ID, 
+          B=CitationDiving$CITATION_ID)
+# pdf(file='figures/ringtail/dataset-comparison.pdf')
+ggVennDiagram(x,category.names = c("SystematicSearch","CitationDiving")) +
+  scale_fill_viridis(direction = -1) + 
+  scale_color_manual(values = c("black","black")) +
+  ggtitle("Venn Diagram of All Literature") +
+  theme(plot.title = element_text(hjust=0.5, vjust = 5, face = "bold"))
+
+
+# dev.off()
+# while (!is.null(dev.list()))  dev.off()
+
+# Let's filter to only relevant data 
+rellit <- lit %>% dplyr::filter(Include_from_fulltext == "yes")
+
+rSystematicSearch = rellit %>% 
+  dplyr::filter(systematic_searchOksanen == "yes") 
+rCitationDiving = rellit %>% 
+  dplyr::filter(c(EID2 == "yes" | GMPD2 == "yes")) 
+y <- list(A=rSystematicSearch$CITATION_ID, 
+          B=rCitationDiving$CITATION_ID)
+# pdf(file='figures/ringtail/dataset-comparison.pdf')
+ggVennDiagram(y,category.names = c("SystematicSearch","CitationDiving")) +
+  scale_fill_viridis(direction = -1) + 
+  scale_color_manual(values = c("black","black")) +
+  ggtitle("Venn Diagram of Relevant Literature") +
+  theme(plot.title = element_text(hjust=0.5, vjust = 5, face = "bold"))
+```
+
+
+## All discovered literature
+
+```{r Stacked Bar Plots, echo=FALSE}
+
+SampleSizes <- c("Snowballing \n N = 296", "Systematic Search \n N = 364")
+
+#Journal (count of languages per method)
+journal <- lit %>%
+  group_by(id_method) %>%
+  summarise(count = n_distinct(JOURNAL))
+# Source: local data table [2 x 2]
+
+Journal_Plot <- ggplot(journal) +
+  aes(x = id_method, y = count) +
+  geom_col(fill = "darkblue") +
+  scale_x_discrete(labels= SampleSizes) +
+  ylim(0,150) +
+  theme_minimal() +
+  ggtitle("Number of Journals per Approach") +
+  annotate("text", x=1, y=125, label= "X-squared = 308.75, \ndf = 169, p-value = 2.992e-10") +
+  theme(
+    plot.title = element_text(hjust=0.5, face = "bold"), axis.text.x=element_text(size=12),
+    panel.background = element_rect(fill='white')) +
+  theme(axis.title = element_blank())
+
+print(Journal_Plot)
+
+#Language (count of languages per method)
+language <- lit %>%
+  group_by(id_method) %>%
+  summarise(count = n_distinct(Language))
+# Source: local data table [2 x 2]
+
+Languages_Plot <- ggplot(language) +
+  aes(x = id_method, y = count) +
+  geom_col(fill = "darkblue") +
+  scale_x_discrete(labels= SampleSizes) +
+  ylim(0,15) +
+  theme_minimal() +
+  ggtitle("Number of Languages per Approach") +
+  annotate("text", x=1, y=13, label= "X-squared = 69.039, \ndf = 18, p-value = 6.568e-08") +
+  theme(
+    plot.title = element_text(hjust=0.5, face = "bold"), axis.text.x=element_text(size=12),
+    panel.background = element_rect(fill='white')) +
+  theme(axis.title = element_blank())
+
+print(Languages_Plot)
+
+
+#open access
+OpenAccess_Plot <- lit %>%
+ filter(!(open_access %in% "")) %>%
+ ggplot() +
+  aes(x = id_method, fill = open_access) +
+  geom_bar(position = "fill") +
+  scale_x_discrete(labels= SampleSizes) +
+  scale_fill_manual(values = c("darkgray", "darkblue")) +
+  theme_minimal() +
+  ggtitle("Accessibility per Approach") +
+  annotate("text", x=1, y=.7, label= "X-squared = 1.6166, \ndf = 1, p-value = 0.2") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"), axis.text.x=element_text(size=12),
+        panel.background = element_rect(fill='white')) +
+  theme(axis.title = element_blank()) +
+  guides(fill=guide_legend(title="Open Access"))
+
+print(OpenAccess_Plot)
+
+# Relevant
+Relevant_Plot <- lit %>%
+ filter(!(Include_from_fulltext %in% "")) %>%
+ ggplot() +
+  aes(x = id_method, fill = Include_from_fulltext) +
+  geom_bar(position = "fill") +
+  scale_x_discrete(labels= SampleSizes) +
+  scale_fill_manual(values = c("darkgray", "darkblue")) +
+  theme_minimal() +
+  ggtitle("Relevant Papers per Approach") +
+  annotate("text", x=1, y=.7, label= "X-squared = 198.95, \ndf = 2, p-value < 2.2e-16") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"), axis.text.x=element_text(size=12),
+        panel.background = element_rect(fill='white')) +
+  theme(axis.title = element_blank()) +
+  guides(fill=guide_legend(title="Relevant"))
+
+print(Relevant_Plot)
+
+```
+
+
+## Only Relevant Literature
+```{r echo=FALSE}
+
+SampleSizes_rellit <- c("Snowballing \n N = 190", "Systematic Search \n N = 230")
+
+
+#Journal (count of languages per method)
+journal <- rellit %>%
+  group_by(id_method) %>%
+  summarise(count = n_distinct(JOURNAL))
+# Source: local data table [2 x 2]
+
+Journal_Plot <- ggplot(journal) +
+  aes(x = id_method, y = count) +
+  geom_col(fill = "darkblue") +
+  scale_x_discrete(labels= SampleSizes_rellit) +
+  ylim(0,150) +
+  theme_minimal() +
+  ggtitle("Number of Journals per Approach") +
+  annotate("text", x=1, y=125, label= "X-squared = 199.92, \ndf = 105, p-value = 6.878e-08") +
+  theme(
+    plot.title = element_text(hjust=0.5, face = "bold"), axis.text.x=element_text(size=12),
+    panel.background = element_rect(fill='white')) +
+  theme(axis.title = element_blank())
+
+print(Journal_Plot)
+#Language (count of languages per method)
+language <- rellit %>%
+  group_by(id_method) %>%
+  summarise(count = n_distinct(Language))
+# Source: local data table [2 x 2]
+
+Languages_Plot <- ggplot(language) +
+  aes(x = id_method, y = count) +
+  geom_col(fill = "darkblue") +
+  scale_x_discrete(labels= SampleSizes_rellit) +
+  ylim(0,15) +
+  theme_minimal() +
+  ggtitle("Number of Languages per Approach") +
+  annotate("text", x=1, y=13, label= "X-squared = 47.469, \ndf = 12, p-value = 3.865e-06") +
+  theme(
+    plot.title = element_text(hjust=0.5, face = "bold"), axis.text.x=element_text(size=12),
+    panel.background = element_rect(fill='white')) +
+  theme(axis.title = element_blank())
+
+print(Languages_Plot)
+
+
+#open access
+OpenAccess_Plot <- rellit %>%
+ filter(!(open_access %in% "")) %>%
+ ggplot() +
+  aes(x = id_method, fill = open_access) +
+  geom_bar(position = "fill") +
+  scale_x_discrete(labels= SampleSizes_rellit) +
+  scale_fill_manual(values = c("darkgray", "darkblue")) +
+  theme_minimal() +
+  ggtitle("Accessibility per Approach") +
+    annotate("text", x=1, y=.7, label= "X-squared = 1.732, \ndf = 1, p-value = 0.18") +
+  theme(plot.title = element_text(hjust=0.5, face = "bold"), axis.text.x=element_text(size=12),
+        panel.background = element_rect(fill='white')) +
+  theme(axis.title = element_blank()) +
+  guides(fill=guide_legend(title="Open Access"))
+
+print(OpenAccess_Plot)
+
+```
+
+```{r p values, message=FALSE, warning=FALSE, include=FALSE}
+
+#chi squared tests
+
+chisq.test(table(lit$id_method, lit$Language))
+chisq.test(table(lit$id_method, lit$open_access))
+chisq.test(table(lit$id_method, lit$Include_from_fulltext))
+chisq.test(table(lit$id_method, lit$JOURNAL))
+
+chisq.test(table(rellit$id_method, rellit$Language))
+chisq.test(table(rellit$id_method, rellit$open_access))
+chisq.test(table(rellit$id_method, rellit$Include_from_fulltext))
+chisq.test(table(rellit$id_method, rellit$JOURNAL))
+
+```
+
+# Accumulation Curves 
+How many databases or search approaches are needed before we can determine we've found nearly all papers?
+
+## All discoverered literature
+```{r accumulation_curve, echo=FALSE, message=FALSE, warning=FALSE}
+# need to make a matrix of databases and literature 
+library(vegan)
+
+
+# convert datafram into a matrix R 
+bd_mat <- lit %>% dplyr::filter(Database_agreement != 0)
+bd_mat <- bd_mat[,c(1:4, 11)] 
+rownames(bd_mat) <- bd_mat$CITATION_ID
+bd_mat$CITATION_ID <- NULL
+bd_mat <- ifelse(bd_mat == "no", 0, 1)
+bd_mat <- t(bd_mat) # transpose so adding databases 
+
+database_sums <- rowSums(bd_mat)
+```
+
+#### Calculate mean and standard deviation by databases
+Mean of 176 (+/- 117) papers from each search
+```{r echo=TRUE, warning=FALSE}
+
+# calculate mean and standard deviatiion by databases 
+mean(database_sums) #mean
+sd(database_sums) #standard deviation
+```
+
+### Rarefaction Curve
+A plateau indicates that adding more databases won't result in many more papers (or any at all)
+```{r echo=FALSE, warning=FALSE}
+# calculate rarefication curve
+l_accum <- specaccum(bd_mat, method = "exact", permutations = 100,
+                     conditioned =TRUE, gamma = "jack1",  w = NULL)
+# plot accumulation curve for our data 
+plot(l_accum,
+     xlab = "Number of Bibliographic Databases Searched",
+     ylab = "Number of discovered literature",
+    ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue",
+    xlim = c(1,3))
+```
+
+
+## Only relevant literature
+```{r accumulation curves - relevant lit, echo=FALSE, message=FALSE, warning=FALSE}
+
+# But we don't really care about all literature, we only care about relevant literature: 
+
+rellit.agreement <- lit %>% dplyr::filter(Include_from_fulltext == "yes")
+
+
+rbd_mat <- rellit.agreement %>% 
+  dplyr::filter(Database_agreement != 0) 
+rbd_mat <- rbd_mat[,c(1:4, 11)] 
+rownames(rbd_mat) <-rbd_mat$CITATION_ID
+rbd_mat$CITATION_ID <- NULL
+rbd_mat <- ifelse(rbd_mat == "no", 0, 1)
+rbd_mat <- t(rbd_mat) # transpose so adding databases 
+
+rdatabase_sums <- rowSums(rbd_mat)
+```
+
+#### Calculate mean and standard deviation by database
+Mean of 120 (+/- 60) papers from each search
+```{r echo=TRUE, warning=FALSE}
+
+# calculate mean and standard deviation by databases 
+mean(rdatabase_sums) #mean
+sd(rdatabase_sums) #standard deviation
+
+```
+
+### Rarefication curve
+A plateau indicates that adding more databases won't result in many more papers (or any at all)
+```{r echo=FALSE, warning=FALSE}
+
+# calculate rarefication curve
+l_accum <- specaccum(rbd_mat, method = "exact", permutations = 100,
+                     conditioned =TRUE, gamma = "jack1",  w = NULL)
+# plot accumulation curve for our data 
+plot(l_accum,
+     xlab = "Number of Bibliographic Databases Searched",
+     ylab = "Number of discovered literature",
+    ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue",
+    xlim = c(1,3))
+```
+
+### Extrapolate the accumulation curve with addition of other databases 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+rlitpool <- specpool(rbd_mat)
+rlitpool
+rlit_extrap <- poolaccum(rbd_mat)
+plot(rlit_extrap)
+```
